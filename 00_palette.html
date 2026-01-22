@@ -78,7 +78,10 @@
     <div id="controls">
         <button id="addColorBtn">+ Add Entry</button>
         <button id="saveJsonBtn">💾 Save 00_palette.json</button>
+        <button id="loadJsonBtn">📂 Load JSON</button>
+        <input type="file" id="jsonFileInput" accept=".json" style="display:none" />
     </div>
+
 
     <h3>Debug: Palette JSON</h3>
     <pre id="debug"></pre>
@@ -86,7 +89,6 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
 
-            // 팔레트 데이터
             let palette = [
                 { color: '#000000', cmd: '' },
                 { color: '#ffffff', cmd: '' },
@@ -98,14 +100,9 @@
             const paletteUI = document.getElementById('paletteUI');
             const addColorBtn = document.getElementById('addColorBtn');
             const saveJsonBtn = document.getElementById('saveJsonBtn');
+            const loadJsonBtn = document.getElementById('loadJsonBtn');
+            const jsonFileInput = document.getElementById('jsonFileInput');
             const debug = document.getElementById('debug');
-
-            if (!paletteUI || !addColorBtn || !saveJsonBtn) {
-                console.error('UI element not found:', {
-                    paletteUI, addColorBtn, saveJsonBtn
-                });
-                return;
-            }
 
             function renderPaletteUI() {
                 paletteUI.innerHTML = '';
@@ -114,7 +111,6 @@
                     const row = document.createElement('div');
                     row.className = 'palette-item';
 
-                    // Color picker
                     const colorInput = document.createElement('input');
                     colorInput.type = 'color';
                     colorInput.value = entry.color;
@@ -124,7 +120,6 @@
                         updateDebug();
                     });
 
-                    // Hex input
                     const hexInput = document.createElement('input');
                     hexInput.type = 'text';
                     hexInput.value = entry.color;
@@ -139,16 +134,14 @@
                         }
                     });
 
-                    // CMD textarea
                     const cmdInput = document.createElement('textarea');
                     cmdInput.placeholder = 'Command / Script for this color...';
-                    cmdInput.value = entry.cmd;
+                    cmdInput.value = entry.cmd || '';
                     cmdInput.addEventListener('input', () => {
                         entry.cmd = cmdInput.value;
                         updateDebug();
                     });
 
-                    // Delete button
                     const delBtn = document.createElement('button');
                     delBtn.textContent = '✖';
                     delBtn.title = 'Delete';
@@ -168,15 +161,12 @@
             }
 
             addColorBtn.addEventListener('click', () => {
-                console.log('Add Entry clicked');
-                palette.push({
-                    color: '#888888',
-                    cmd: ''
-                });
+                palette.push({ color: '#888888', cmd: '' });
                 renderPaletteUI();
                 updateDebug();
             });
 
+            // ===== Export =====
             saveJsonBtn.addEventListener('click', () => {
                 const json = JSON.stringify(palette, null, 2);
                 const blob = new Blob([json], { type: 'application/json' });
@@ -192,15 +182,66 @@
                 URL.revokeObjectURL(url);
             });
 
+            // ===== Import =====
+            loadJsonBtn.addEventListener('click', () => {
+                jsonFileInput.value = ''; // 같은 파일 다시 선택 가능
+                jsonFileInput.click();
+            });
+
+            jsonFileInput.addEventListener('change', () => {
+                const file = jsonFileInput.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const parsed = JSON.parse(reader.result);
+
+                        if (!Array.isArray(parsed)) {
+                            throw new Error('JSON root is not an array');
+                        }
+
+                        // 구조 검증 + 정규화
+                        const newPalette = parsed.map((item, i) => {
+                            if (
+                                !item ||
+                                typeof item.color !== 'string' ||
+                                !/^#[0-9a-fA-F]{6}$/.test(item.color)
+                            ) {
+                                throw new Error(`Invalid color at index ${i}`);
+                            }
+
+                            return {
+                                color: item.color,
+                                cmd: typeof item.cmd === 'string' ? item.cmd : ''
+                            };
+                        });
+
+                        // 교체
+                        palette = newPalette;
+                        renderPaletteUI();
+                        updateDebug();
+
+                        alert(`Loaded ${palette.length} palette entries.`);
+
+                    } catch (err) {
+                        console.error(err);
+                        alert('Failed to load JSON:\n' + err.message);
+                    }
+                };
+
+                reader.readAsText(file);
+            });
+
             function updateDebug() {
                 debug.textContent = JSON.stringify(palette, null, 2);
             }
 
-            // 초기 렌더
             renderPaletteUI();
             updateDebug();
 
         });
     </script>
 </body>
+
 </html>
