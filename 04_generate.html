@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ADB Bash Generator</title>
+    <style>
+        body {
+            background: #111;
+            color: #eee;
+            font-family: sans-serif;
+        }
+
+        .panel {
+            border: 1px solid #444;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 6px 12px;
+        }
+
+        #log {
+            white-space: pre-wrap;
+            font-size: 12px;
+            background: #000;
+            padding: 6px;
+            max-height: 200px;
+            overflow: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>ADB Bash Generator</h2>
+
+    <div class="panel">
+        <h3>1) Load Palette JSON</h3>
+        <input type="file" id="paletteFile" accept=".json">
+    </div>
+
+    <div class="panel">
+        <h3>2) Load Canvas Config JSON</h3>
+        <input type="file" id="canvasFile" accept=".json">
+    </div>
+
+    <div class="panel">
+        <h3>3) Load Remapped Image</h3>
+        <input type="file" id="imageFile" accept="image/*">
+    </div>
+
+    <div class="panel">
+        <h3>Status</h3>
+        <div id="log">Waiting for files...</div>
+    </div>
+
+    <div class="panel">
+        <button id="exportBtn" disabled>Export bash file</button>
+    </div>
+
+    <script>
+        const paletteInput = document.getElementById("paletteFile");
+        const canvasInput = document.getElementById("canvasFile");
+        const imageInput = document.getElementById("imageFile");
+        const exportBtn = document.getElementById("exportBtn");
+        const logEl = document.getElementById("log");
+
+        let paletteData = null;
+        let canvasConfig = null;
+        let imageObj = null;
+
+        let CMD = "";
+
+        function log(msg) {
+            logEl.textContent += msg + "\n";
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // ---------- Utils ----------
+
+        function hexToRgb(hex) {
+            hex = hex.replace("#", "");
+            return {
+                r: parseInt(hex.slice(0, 2), 16),
+                g: parseInt(hex.slice(2, 4), 16),
+                b: parseInt(hex.slice(4, 6), 16)
+            };
+        }
+
+        function rgbToHex(r, g, b) {
+            return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
+        }
+
+        // ---------- Load Palette ----------
+
+        paletteInput.addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    paletteData = JSON.parse(reader.result);
+                    log(`Palette loaded: ${paletteData.length} entries`);
+                    tryProcess();
+                } catch (err) {
+                    alert("Palette JSON error: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // ---------- Load Canvas Config ----------
+
+        canvasInput.addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    canvasConfig = JSON.parse(reader.result);
+                    log("Canvas config loaded");
+                    tryProcess();
+                } catch (err) {
+                    alert("Canvas JSON error: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // ---------- Load Image ----------
+
+        imageInput.addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const img = new Image();
+            img.onload = () => {
+                imageObj = img;
+                log(`Image loaded: ${img.width} x ${img.height}`);
+                tryProcess();
+            };
+            img.src = URL.createObjectURL(file);
+        });
+
+        // ---------- Main Trigger ----------
+
+        function tryProcess() {
+            if (!paletteData || !canvasConfig || !imageObj) return;
+            log("All files loaded. Processing...");
+            generateScript();
+            exportBtn.disabled = false;
+            log("Ready to export.");
+        }
+
+        // ---------- Core Logic ----------
+
+        function generateScript() {
+            CMD = "#!/bin/bash\n\n";
+
+            const imgW = imageObj.width;
+            const imgH = imageObj.height;
+
+            // ---- 1) Scan image once -> color buckets ----
+
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = imgW;
+            tempCanvas.height = imgH;
+            const tctx = tempCanvas.getContext("2d");
+            tctx.drawImage(imageObj, 0, 0);
+
+            const imgData = tctx.getImageData(0, 0, imgW, imgH).data;
+
+            const colorBuckets = {}; // { "#rrggbb": [ {x,y}, ... ] }
+
+            let idx = 0;
+            for (let y = 0; y < imgH; y++) {
+                for (let x = 0; x < imgW; x++) {
+                    const r = imgData[idx];
+                    const g = imgData[idx + 1];
+                    const b = imgData[idx + 2];
+                    const a = imgData[idx + 3];
+                    idx += 4;
+
+                    if (a === 0) continue;
+
+                    const hex = rgbToHex(r, g, b);
+                    if (!colorBuckets[hex]) colorBuckets[hex] = [];
+                    colorBuckets[hex].push({ x, y });
+                }
+            }
+
+            log(`Image scanned. Unique colors: ${Object.keys(colorBuckets).length}`);
+
+            // ---- 2) Canvas mapping values ----
+            const cfg = canvasConfig[0]; // 또는 선택한 aspect
+            const { startX, startY, endX, endY } = cfg;
+
+            // ---- 3) Palette-driven command generation ----
+
+            for (let i = 0; i < paletteData.length; i++) {
+                const entry = paletteData[i];
+                const color = entry.color;
+                const selectCmd = entry.cmd; // 색상 선택용
+
+                const pixels = colorBuckets[color];
+                if (!pixels || !pixels.length) {
+                    log(`Palette color not found in image: ${color}`);
+                    continue;
+                }
+
+                // ✅ 1) 색상 선택 cmd - 딱 1번
+                if (selectCmd && selectCmd.trim()) {
+                    CMD += `${selectCmd}\n`;
+                }
+
+                log(`Processing color ${color} : ${pixels.length} pixels`);
+
+                // ✅ 2) 해당 색상 모든 픽셀에 tap
+                for (const p of pixels) {
+                    const u = p.x / (imgW - 1);
+                    const v = p.y / (imgH - 1);
+
+                    let mappedX = startX + u * (endX - startX);
+                    let mappedY = startY + v * (endY - startY);
+
+                    mappedX = Math.floor(mappedX);
+                    mappedY = Math.floor(mappedY);
+
+                    // 🔴 baseCmd 아님! 고정 tap
+                    CMD += `adb shell input tap ${mappedX} ${mappedY}\n`;
+                }
+            }
+
+            log("Script generation complete.");
+        }
+
+        // ---------- Export ----------
+
+        exportBtn.addEventListener("click", () => {
+            const blob = new Blob([CMD], { type: "text/plain" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "auto_input.bash";
+            a.click();
+        });
+    </script>
+
+</body>
+
+</html>
