@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Canvas Projection Config</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 16px;
+    }
+
+    .ratio-block {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .ratio-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(80px, 1fr));
+      gap: 8px;
+      align-items: center;
+    }
+
+    .grid label {
+      font-size: 12px;
+      color: #555;
+    }
+
+    .grid input {
+      width: 100%;
+      padding: 4px;
+      box-sizing: border-box;
+      font-family: monospace;
+    }
+
+    #controls {
+      margin-top: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    pre {
+      background: #f5f5f5;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      max-height: 300px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Canvas Projection Config Editor</h2>
+
+<div id="configUI"></div>
+
+<div id="controls">
+  <button id="saveJsonBtn">💾 Save 01_canvas_config.json</button>
+  <button id="loadJsonBtn">📂 Load JSON</button>
+  <input type="file" id="jsonFileInput" accept=".json" style="display:none" />
+</div>
+
+<h3>Debug: Config JSON</h3>
+<pre id="debug"></pre>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  // ===== 기본 설정 구조 =====
+  let canvasConfigs = [
+    { ratio: '16:9', width: 1920, height: 1080, startX: 0, startY: 0, endX: 1919, endY: 1079 },
+    { ratio: '4:3',  width: 1024, height: 768,  startX: 0, startY: 0, endX: 1023, endY: 767  },
+    { ratio: '1:1',  width: 1024, height: 1024, startX: 0, startY: 0, endX: 1023, endY: 1023 },
+    { ratio: '3:4',  width: 768,  height: 1024, startX: 0, startY: 0, endX: 767,  endY: 1023 },
+    { ratio: '9:16', width: 1080, height: 1920, startX: 0, startY: 0, endX: 1079, endY: 1919 },
+  ];
+
+  const configUI = document.getElementById('configUI');
+  const saveJsonBtn = document.getElementById('saveJsonBtn');
+  const loadJsonBtn = document.getElementById('loadJsonBtn');
+  const jsonFileInput = document.getElementById('jsonFileInput');
+  const debug = document.getElementById('debug');
+
+  function renderConfigUI() {
+    configUI.innerHTML = '';
+
+    canvasConfigs.forEach((cfg, index) => {
+      const block = document.createElement('div');
+      block.className = 'ratio-block';
+
+      const title = document.createElement('div');
+      title.className = 'ratio-title';
+      title.textContent = `Aspect Ratio: ${cfg.ratio}`;
+      block.appendChild(title);
+
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+
+      grid.appendChild(makeLabeledInput('Width', cfg.width, val => cfg.width = val));
+      grid.appendChild(makeLabeledInput('Height', cfg.height, val => cfg.height = val));
+      grid.appendChild(makeLabeledInput('Start X', cfg.startX, val => cfg.startX = val));
+      grid.appendChild(makeLabeledInput('Start Y', cfg.startY, val => cfg.startY = val));
+      grid.appendChild(makeLabeledInput('End X', cfg.endX, val => cfg.endX = val));
+      grid.appendChild(makeLabeledInput('End Y', cfg.endY, val => cfg.endY = val));
+
+      block.appendChild(grid);
+      configUI.appendChild(block);
+    });
+
+    updateDebug();
+  }
+
+  function makeLabeledInput(labelText, value, onChange) {
+    const wrapper = document.createElement('div');
+
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    wrapper.appendChild(label);
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.value = value;
+    input.addEventListener('input', () => {
+      const v = Number(input.value);
+      onChange(Number.isFinite(v) ? v : 0);
+      updateDebug();
+    });
+
+    wrapper.appendChild(input);
+    return wrapper;
+  }
+
+  // ===== Export =====
+  saveJsonBtn.addEventListener('click', () => {
+    const json = JSON.stringify(canvasConfigs, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '01_canvas_config.json';
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ===== Import =====
+  loadJsonBtn.addEventListener('click', () => {
+    jsonFileInput.value = '';
+    jsonFileInput.click();
+  });
+
+  jsonFileInput.addEventListener('change', () => {
+    const file = jsonFileInput.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+
+        if (!Array.isArray(parsed)) {
+          throw new Error('JSON root is not an array');
+        }
+
+        const newConfigs = parsed.map((item, i) => {
+          if (
+            typeof item.ratio !== 'string' ||
+            !Number.isFinite(item.width) ||
+            !Number.isFinite(item.height)
+          ) {
+            throw new Error(`Invalid config at index ${i}`);
+          }
+
+          return {
+            ratio: item.ratio,
+            width: Number(item.width),
+            height: Number(item.height),
+            startX: Number(item.startX || 0),
+            startY: Number(item.startY || 0),
+            endX: Number(item.endX || 0),
+            endY: Number(item.endY || 0),
+          };
+        });
+
+        canvasConfigs = newConfigs;
+        renderConfigUI();
+
+        alert(`Loaded ${canvasConfigs.length} canvas configs.`);
+
+      } catch (err) {
+        console.error(err);
+        alert('Failed to load JSON:\n' + err.message);
+      }
+    };
+
+    reader.readAsText(file);
+  });
+
+  function updateDebug() {
+    debug.textContent = JSON.stringify(canvasConfigs, null, 2);
+  }
+
+  renderConfigUI();
+
+});
+</script>
+
+</body>
+</html>
