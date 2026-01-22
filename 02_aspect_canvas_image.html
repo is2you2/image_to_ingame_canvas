@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Aspect Canvas Image Tool</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #111;
+            color: #eee;
+        }
+
+        button {
+            margin: 4px;
+        }
+
+        canvas {
+            background: #222;
+            border: 1px solid #555;
+            display: block;
+            margin-top: 10px;
+        }
+
+        .panel {
+            border: 1px solid #444;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 160px;
+            background: #000;
+            color: #0f0;
+        }
+
+        input[type=range] {
+            width: 300px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Aspect Canvas Image Tool (Prototype)</h2>
+
+    <div class="panel">
+        <h3>1) Aspect Config JSON (Canvas Settings)</h3>
+        <textarea id="aspectJsonInput">
+{
+  "16:9": { "width": 1920, "height": 1080, "start": { "x": 0, "y": 0 }, "end": { "x": 1919, "y": 1079 } },
+  "4:3":  { "width": 1024, "height": 768,  "start": { "x": 0, "y": 0 }, "end": { "x": 1023, "y": 767 } },
+  "1:1":  { "width": 1024, "height": 1024, "start": { "x": 0, "y": 0 }, "end": { "x": 1023, "y": 1023 } },
+  "3:4":  { "width": 768,  "height": 1024, "start": { "x": 0, "y": 0 }, "end": { "x": 767,  "y": 1023 } },
+  "9:16": { "width": 1080, "height": 1920, "start": { "x": 0, "y": 0 }, "end": { "x": 1079, "y": 1919 } }
+}
+  </textarea>
+        <button onclick="loadAspectJson()">Load Aspect JSON</button>
+    </div>
+
+    <div class="panel">
+        <h3>2) Select Output Aspect</h3>
+        <button onclick="selectAspect('16:9')">16:9</button>
+        <button onclick="selectAspect('4:3')">4:3</button>
+        <button onclick="selectAspect('1:1')">1:1</button>
+        <button onclick="selectAspect('3:4')">3:4</button>
+        <button onclick="selectAspect('9:16')">9:16</button>
+        <div>Selected Aspect: <span id="selectedAspectLabel">16:9</span></div>
+    </div>
+
+    <div class="panel">
+        <h3>3) Image Input + Scale</h3>
+        <input type="file" id="imageInput" accept="image/*"><br><br>
+        Scale:
+        <input type="range" id="scaleSlider" min="0.2" max="3" step="0.01" value="1">
+        <span id="scaleValue">1.00</span>
+    </div>
+
+    <div class="panel">
+        <h3>Preview Canvas</h3>
+        <canvas id="previewCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("previewCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const imageInput = document.getElementById("imageInput");
+        const scaleSlider = document.getElementById("scaleSlider");
+        const scaleValue = document.getElementById("scaleValue");
+        const selectedAspectLabel = document.getElementById("selectedAspectLabel");
+
+        let aspectConfig = {};
+        let selectedAspect = "16:9";
+        let currentImage = null;
+        let userScale = 1.0;
+
+        // --------- Utils ---------
+
+        function calcCanvasSize(width, height, maxSize = 300) {
+            const scale = Math.min(
+                maxSize / width,
+                maxSize / height,
+                1
+            );
+
+            const canvasW = Math.round(width * scale);
+            const canvasH = Math.round(height * scale);
+
+            return { canvasW, canvasH };
+        }
+
+
+
+        function calcFitImage(imgW, imgH, canvasW, canvasH, scale = 1.0) {
+            const imgRatio = imgW / imgH;
+            const canvasRatio = canvasW / canvasH;
+
+            let drawW, drawH;
+
+            if (imgRatio > canvasRatio) {
+                drawW = canvasW;
+                drawH = canvasW / imgRatio;
+            } else {
+                drawH = canvasH;
+                drawW = canvasH * imgRatio;
+            }
+
+            drawW *= scale;
+            drawH *= scale;
+
+            const drawX = (canvasW - drawW) / 2;
+            const drawY = (canvasH - drawH) / 2;
+
+            return { drawX, drawY, drawW, drawH };
+        }
+
+        // --------- Aspect JSON ---------
+
+        function loadAspectJson() {
+            try {
+                const txt = document.getElementById("aspectJsonInput").value;
+                aspectConfig = JSON.parse(txt);
+                alert("Aspect JSON loaded!");
+                setupCanvasSize();
+                redraw();
+            } catch (e) {
+                alert("JSON Parse Error: " + e.message);
+            }
+        }
+
+        // --------- Aspect Selection ---------
+
+        function selectAspect(aspect) {
+            selectedAspect = aspect;
+            selectedAspectLabel.textContent = aspect;
+            setupCanvasSize();
+            redraw();
+        }
+
+        function setupCanvasSize() {
+            const cfg = aspectConfig[selectedAspect];
+            if (!cfg) return;
+
+            const { canvasW, canvasH } = calcCanvasSize(cfg.width, cfg.height);
+            canvas.width = canvasW;
+            canvas.height = canvasH;
+        }
+
+        // --------- Image Handling ---------
+
+        imageInput.addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const img = new Image();
+            img.onload = () => {
+                currentImage = img;
+                redraw();
+            };
+            img.src = URL.createObjectURL(file);
+        });
+
+        // --------- Scale ---------
+
+        scaleSlider.addEventListener("input", e => {
+            userScale = parseFloat(e.target.value);
+            scaleValue.textContent = userScale.toFixed(2);
+            redraw();
+        });
+
+        // --------- Draw ---------
+
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!currentImage) return;
+
+            const fit = calcFitImage(
+                currentImage.width,
+                currentImage.height,
+                canvas.width,
+                canvas.height,
+                userScale
+            );
+
+            ctx.drawImage(
+                currentImage,
+                fit.drawX,
+                fit.drawY,
+                fit.drawW,
+                fit.drawH
+            );
+        }
+
+        // --------- Init ---------
+
+        loadAspectJson();
+        selectAspect("16:9");
+    </script>
+
+</body>
+
+</html>
