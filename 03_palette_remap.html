@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Palette Remap (Simple)</title>
+<style>
+  body { background:#111; color:#eee; font-family:sans-serif; }
+  .panel { border:1px solid #444; padding:10px; margin-bottom:10px; }
+  canvas { border:1px solid #555; background:#000; image-rendering: pixelated; }
+  button { padding:6px 12px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<h2>Palette Remap (Final Image)</h2>
+
+<div class="panel">
+  <h3>1) Load Palette JSON</h3>
+  <input type="file" id="paletteJsonFile" accept=".json">
+</div>
+
+<div class="panel">
+  <h3>2) Load Final Image</h3>
+  <input type="file" id="imageInput" accept="image/*">
+</div>
+
+<div class="panel">
+  <h3>Result</h3>
+  <canvas id="resultCanvas"></canvas>
+  <div style="margin-top:8px;">
+    <button id="saveBtn">Save Remapped Image</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<script>
+const paletteFileInput = document.getElementById("paletteJsonFile");
+const imageInput = document.getElementById("imageInput");
+const canvas = document.getElementById("resultCanvas");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const saveBtn = document.getElementById("saveBtn");
+
+let paletteData = []; // [{color:"#rrggbb", cmd, rgb}]
+
+// ---------- Utils ----------
+
+function hexToRgb(hex) {
+  hex = hex.replace("#","");
+  return {
+    r: parseInt(hex.substring(0,2),16),
+    g: parseInt(hex.substring(2,4),16),
+    b: parseInt(hex.substring(4,6),16)
+  };
+}
+
+function colorDistance(a, b) {
+  const dr = a.r - b.r;
+  const dg = a.g - b.g;
+  const db = a.b - b.b;
+  return dr*dr + dg*dg + db*db;
+}
+
+function findNearestPaletteColor(rgb) {
+  let best = null;
+  let bestDist = Infinity;
+
+  for (const p of paletteData) {
+    const d = colorDistance(rgb, p.rgb);
+    if (d < bestDist) {
+      bestDist = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
+// ---------- Load Palette JSON ----------
+
+paletteFileInput.addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const json = JSON.parse(reader.result);
+      paletteData = json.map(p => ({
+        ...p,
+        rgb: hexToRgb(p.color)
+      }));
+      alert(`Palette loaded: ${paletteData.length} colors`);
+    } catch (err) {
+      alert("Palette JSON parse error: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+// ---------- Load Image & Remap ----------
+
+imageInput.addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (!paletteData.length) {
+    alert("Load palette JSON first");
+    return;
+  }
+
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+
+  img.onload = () => {
+    remapImage(img);
+    URL.revokeObjectURL(url);
+  };
+
+  img.src = url;
+});
+
+// ---------- Core Remap ----------
+
+function remapImage(img) {
+  statusEl.textContent = "Processing...";
+
+  const w = img.width;
+  const h = img.height;
+
+  canvas.width = w;
+  canvas.height = h;
+
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = w;
+  tempCanvas.height = h;
+  const tempCtx = tempCanvas.getContext("2d");
+  tempCtx.drawImage(img, 0, 0);
+
+  const srcImgData = tempCtx.getImageData(0, 0, w, h);
+  const src = srcImgData.data;
+
+  const outImgData = ctx.createImageData(w, h);
+  const out = outImgData.data;
+
+  for (let i = 0; i < src.length; i += 4) {
+    const r = src[i];
+    const g = src[i+1];
+    const b = src[i+2];
+    const a = src[i+3];
+
+    if (a === 0) {
+      out[i]   = 0;
+      out[i+1] = 0;
+      out[i+2] = 0;
+      out[i+3] = 0;
+    } else {
+      const nearest = findNearestPaletteColor({r,g,b});
+      if (nearest) {
+        out[i]   = nearest.rgb.r;
+        out[i+1] = nearest.rgb.g;
+        out[i+2] = nearest.rgb.b;
+        out[i+3] = a;
+      } else {
+        out[i]   = r;
+        out[i+1] = g;
+        out[i+2] = b;
+        out[i+3] = a;
+      }
+    }
+  }
+
+  ctx.putImageData(outImgData, 0, 0);
+
+  statusEl.textContent = `Done. ${w} x ${h} remapped.`;
+}
+
+// ---------- Save Result ----------
+
+saveBtn.addEventListener("click", () => {
+  if (!canvas.width || !canvas.height) {
+    alert("No image to save yet.");
+    return;
+  }
+
+  const link = document.createElement("a");
+  link.download = "remapped.png";
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+});
+</script>
+
+</body>
+</html>
