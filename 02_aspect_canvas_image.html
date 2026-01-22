@@ -80,11 +80,16 @@
     <div class="panel">
         <h3>Preview Canvas</h3>
         <canvas id="previewCanvas"></canvas>
+        <button onclick="exportFinalImage()">Export Final Image</button>
+        <canvas id="outputCanvas" style="display:none;"></canvas>
     </div>
 
     <script>
         const canvas = document.getElementById("previewCanvas");
         const ctx = canvas.getContext("2d");
+
+        const outputCanvas = document.getElementById("outputCanvas");
+        const outputCtx = outputCanvas.getContext("2d");
 
         const imageInput = document.getElementById("imageInput");
         const scaleSlider = document.getElementById("scaleSlider");
@@ -213,6 +218,52 @@
                 fit.drawH
             );
         }
+
+        function exportFinalImage() {
+            if (!currentImage) {
+                alert("No image loaded");
+                return;
+            }
+
+            const cfg = aspectConfig[selectedAspect];
+            if (!cfg) {
+                alert("No aspect config");
+                return;
+            }
+
+            const outW = cfg.width;
+            const outH = cfg.height;
+
+            // Hidden output canvas 실제 해상도 설정
+            outputCanvas.width = outW;
+            outputCanvas.height = outH;
+
+            outputCtx.clearRect(0, 0, outW, outH);
+
+            // === 실제 해상도 기준으로 Keep Aspect + Center + Scale 계산 ===
+            const fit = calcFitImage(
+                currentImage.width,
+                currentImage.height,
+                outW,
+                outH,
+                userScale
+            );
+
+            outputCtx.drawImage(
+                currentImage,
+                fit.drawX,
+                fit.drawY,
+                fit.drawW,
+                fit.drawH
+            );
+
+            // === 다운로드 ===
+            const link = document.createElement("a");
+            link.download = `output_${selectedAspect.replace(':', 'x')}.png`;
+            link.href = outputCanvas.toDataURL("image/png");
+            link.click();
+        }
+
 
         // --------- Init ---------
 
