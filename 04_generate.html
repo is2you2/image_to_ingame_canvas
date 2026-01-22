@@ -37,6 +37,13 @@
     <h2>ADB Bash Generator</h2>
 
     <div class="panel">
+        <h3>0) Start Script (run once)</h3>
+        <textarea id="startCmdInput" rows="6" style="width:100%;"
+            placeholder="예:\nadb shell am start -n com.example/.MainActivity\nsleep 2\n"></textarea>
+    </div>
+
+
+    <div class="panel">
         <h3>1) Load Palette JSON</h3>
         <input type="file" id="paletteFile" accept=".json">
     </div>
@@ -66,6 +73,8 @@
         const imageInput = document.getElementById("imageFile");
         const exportBtn = document.getElementById("exportBtn");
         const logEl = document.getElementById("log");
+
+        const startCmdInput = document.getElementById("startCmdInput");
 
         let paletteData = null;
         let canvasConfig = null;
@@ -160,6 +169,11 @@
 
         function generateScript() {
             CMD = "#!/bin/bash\n\n";
+
+            const startCmd = startCmdInput.value || "";
+            if (startCmd.trim()) {
+                CMD += startCmd.trim() + "\n\n";
+            }
 
             const imgW = imageObj.width;
             const imgH = imageObj.height;
