@@ -46,17 +46,8 @@
     <h2>Aspect Canvas Image Tool (Prototype)</h2>
 
     <div class="panel">
-        <h3>1) Aspect Config JSON (Canvas Settings)</h3>
-        <textarea id="aspectJsonInput">
-{
-  "16:9": { "width": 1920, "height": 1080, "start": { "x": 0, "y": 0 }, "end": { "x": 1919, "y": 1079 } },
-  "4:3":  { "width": 1024, "height": 768,  "start": { "x": 0, "y": 0 }, "end": { "x": 1023, "y": 767 } },
-  "1:1":  { "width": 1024, "height": 1024, "start": { "x": 0, "y": 0 }, "end": { "x": 1023, "y": 1023 } },
-  "3:4":  { "width": 768,  "height": 1024, "start": { "x": 0, "y": 0 }, "end": { "x": 767,  "y": 1023 } },
-  "9:16": { "width": 1080, "height": 1920, "start": { "x": 0, "y": 0 }, "end": { "x": 1079, "y": 1919 } }
-}
-  </textarea>
-        <button onclick="loadAspectJson()">Load Aspect JSON</button>
+        <h3>1) Load Aspect Config JSON</h3>
+        <input type="file" id="aspectJsonFile" accept=".json">
     </div>
 
     <div class="panel">
@@ -103,6 +94,11 @@
 
         // --------- Utils ---------
 
+        function getAspectCfg(aspect) {
+            if (!Array.isArray(aspectConfig)) return null;
+            return aspectConfig.find(a => a.ratio === aspect);
+        }
+
         function calcCanvasSize(width, height, maxSize = 300) {
             const scale = Math.min(
                 maxSize / width,
@@ -141,19 +137,25 @@
             return { drawX, drawY, drawW, drawH };
         }
 
-        // --------- Aspect JSON ---------
+        const aspectJsonFile = document.getElementById("aspectJsonFile");
 
-        function loadAspectJson() {
-            try {
-                const txt = document.getElementById("aspectJsonInput").value;
-                aspectConfig = JSON.parse(txt);
-                alert("Aspect JSON loaded!");
-                setupCanvasSize();
-                redraw();
-            } catch (e) {
-                alert("JSON Parse Error: " + e.message);
-            }
-        }
+        aspectJsonFile.addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    aspectConfig = JSON.parse(reader.result);
+                    alert("Aspect JSON loaded!");
+                    setupCanvasSize();
+                    redraw();
+                } catch (err) {
+                    alert("Aspect JSON parse error: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+        });
 
         // --------- Aspect Selection ---------
 
@@ -165,13 +167,22 @@
         }
 
         function setupCanvasSize() {
-            const cfg = aspectConfig[selectedAspect];
-            if (!cfg) return;
+            if (!selectedAspect) return;
 
-            const { canvasW, canvasH } = calcCanvasSize(cfg.width, cfg.height);
+            const cfg = getAspectCfg(selectedAspect);
+            if (!cfg) {
+                console.warn("Aspect not found:", selectedAspect);
+                return;
+            }
+
+            const { canvasW, canvasH } = calcCanvasSize(cfg.width, cfg.height, 500);
+
             canvas.width = canvasW;
             canvas.height = canvasH;
+
+            console.log("Canvas resized:", canvasW, canvasH);
         }
+
 
         // --------- Image Handling ---------
 
@@ -225,7 +236,7 @@
                 return;
             }
 
-            const cfg = aspectConfig[selectedAspect];
+            const cfg = getAspectCfg(selectedAspect);
             if (!cfg) {
                 alert("No aspect config");
                 return;
