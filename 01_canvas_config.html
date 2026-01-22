@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8">
   <title>Canvas Projection Config</title>
@@ -57,165 +58,187 @@
     }
   </style>
 </head>
+
 <body>
 
-<h2>Canvas Projection Config Editor</h2>
+  <h2>Canvas Projection Config Editor</h2>
 
-<div id="configUI"></div>
+  <div id="configUI"></div>
 
-<div id="controls">
-  <button id="saveJsonBtn">💾 Save 01_canvas_config.json</button>
-  <button id="loadJsonBtn">📂 Load JSON</button>
-  <input type="file" id="jsonFileInput" accept=".json" style="display:none" />
-</div>
+  <div id="controls">
+    <button id="saveJsonBtn">💾 Save 01_canvas_config.json</button>
+    <button id="loadJsonBtn">📂 Load JSON</button>
+    <input type="file" id="jsonFileInput" accept=".json" style="display:none" />
+  </div>
 
-<h3>Debug: Config JSON</h3>
-<pre id="debug"></pre>
+  <h3>Debug: Config JSON</h3>
+  <pre id="debug"></pre>
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
 
-  // ===== 기본 설정 구조 =====
-  let canvasConfigs = [
-    { ratio: '16:9', width: 1920, height: 1080, startX: 0, startY: 0, endX: 1919, endY: 1079 },
-    { ratio: '4:3',  width: 1024, height: 768,  startX: 0, startY: 0, endX: 1023, endY: 767  },
-    { ratio: '1:1',  width: 1024, height: 1024, startX: 0, startY: 0, endX: 1023, endY: 1023 },
-    { ratio: '3:4',  width: 768,  height: 1024, startX: 0, startY: 0, endX: 767,  endY: 1023 },
-    { ratio: '9:16', width: 1080, height: 1920, startX: 0, startY: 0, endX: 1079, endY: 1919 },
-  ];
+      // ===== 기본 설정 구조 =====
+      let canvasConfigs = [
+        { ratio: '16:9', width: 1920, height: 1080, startX: 0, startY: 0, sizeX: 1920, sizeY: 1080, endX: 1919, endY: 1079 },
+        { ratio: '4:3', width: 1024, height: 768, startX: 0, startY: 0, sizeX: 1024, sizeY: 768, endX: 1023, endY: 767 },
+        { ratio: '1:1', width: 1024, height: 1024, startX: 0, startY: 0, sizeX: 1024, sizeY: 1024, endX: 1023, endY: 1023 },
+        { ratio: '3:4', width: 768, height: 1024, startX: 0, startY: 0, sizeX: 768, sizeY: 1024, endX: 767, endY: 1023 },
+        { ratio: '9:16', width: 1080, height: 1920, startX: 0, startY: 0, sizeX: 1080, sizeY: 1920, endX: 1079, endY: 1919 },
+      ];
 
-  const configUI = document.getElementById('configUI');
-  const saveJsonBtn = document.getElementById('saveJsonBtn');
-  const loadJsonBtn = document.getElementById('loadJsonBtn');
-  const jsonFileInput = document.getElementById('jsonFileInput');
-  const debug = document.getElementById('debug');
+      const configUI = document.getElementById('configUI');
+      const saveJsonBtn = document.getElementById('saveJsonBtn');
+      const loadJsonBtn = document.getElementById('loadJsonBtn');
+      const jsonFileInput = document.getElementById('jsonFileInput');
+      const debug = document.getElementById('debug');
 
-  function renderConfigUI() {
-    configUI.innerHTML = '';
+      function renderConfigUI() {
+        configUI.innerHTML = '';
 
-    canvasConfigs.forEach((cfg, index) => {
-      const block = document.createElement('div');
-      block.className = 'ratio-block';
+        canvasConfigs.forEach((cfg, index) => {
+          const block = document.createElement('div');
+          block.className = 'ratio-block';
 
-      const title = document.createElement('div');
-      title.className = 'ratio-title';
-      title.textContent = `Aspect Ratio: ${cfg.ratio}`;
-      block.appendChild(title);
+          const title = document.createElement('div');
+          title.className = 'ratio-title';
+          title.textContent = `Aspect Ratio: ${cfg.ratio}`;
+          block.appendChild(title);
 
-      const grid = document.createElement('div');
-      grid.className = 'grid';
+          const grid = document.createElement('div');
+          grid.className = 'grid';
 
-      grid.appendChild(makeLabeledInput('Width', cfg.width, val => cfg.width = val));
-      grid.appendChild(makeLabeledInput('Height', cfg.height, val => cfg.height = val));
-      grid.appendChild(makeLabeledInput('Start X', cfg.startX, val => cfg.startX = val));
-      grid.appendChild(makeLabeledInput('Start Y', cfg.startY, val => cfg.startY = val));
-      grid.appendChild(makeLabeledInput('End X', cfg.endX, val => cfg.endX = val));
-      grid.appendChild(makeLabeledInput('End Y', cfg.endY, val => cfg.endY = val));
+          grid.appendChild(makeLabeledInput('Width', cfg.width, val => cfg.width = val));
+          grid.appendChild(makeLabeledInput('Height', cfg.height, val => cfg.height = val));
+          grid.appendChild(makeLabeledInput('Start X', cfg.startX, val => cfg.startX = val));
+          grid.appendChild(makeLabeledInput('Start Y', cfg.startY, val => cfg.startY = val));
+          grid.appendChild(makeLabeledInput('Size X', cfg.sizeX, val => cfg.sizeX = val));
+          grid.appendChild(makeLabeledInput('Size Y', cfg.sizeY, val => cfg.sizeY = val));
 
-      block.appendChild(grid);
-      configUI.appendChild(block);
-    });
-
-    updateDebug();
-  }
-
-  function makeLabeledInput(labelText, value, onChange) {
-    const wrapper = document.createElement('div');
-
-    const label = document.createElement('label');
-    label.textContent = labelText;
-    wrapper.appendChild(label);
-
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.value = value;
-    input.addEventListener('input', () => {
-      const v = Number(input.value);
-      onChange(Number.isFinite(v) ? v : 0);
-      updateDebug();
-    });
-
-    wrapper.appendChild(input);
-    return wrapper;
-  }
-
-  // ===== Export =====
-  saveJsonBtn.addEventListener('click', () => {
-    const json = JSON.stringify(canvasConfigs, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '01_canvas_config.json';
-    document.body.appendChild(a);
-    a.click();
-
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-
-  // ===== Import =====
-  loadJsonBtn.addEventListener('click', () => {
-    jsonFileInput.value = '';
-    jsonFileInput.click();
-  });
-
-  jsonFileInput.addEventListener('change', () => {
-    const file = jsonFileInput.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-
-        if (!Array.isArray(parsed)) {
-          throw new Error('JSON root is not an array');
-        }
-
-        const newConfigs = parsed.map((item, i) => {
-          if (
-            typeof item.ratio !== 'string' ||
-            !Number.isFinite(item.width) ||
-            !Number.isFinite(item.height)
-          ) {
-            throw new Error(`Invalid config at index ${i}`);
-          }
-
-          return {
-            ratio: item.ratio,
-            width: Number(item.width),
-            height: Number(item.height),
-            startX: Number(item.startX || 0),
-            startY: Number(item.startY || 0),
-            endX: Number(item.endX || 0),
-            endY: Number(item.endY || 0),
-          };
+          block.appendChild(grid);
+          configUI.appendChild(block);
         });
 
-        canvasConfigs = newConfigs;
-        renderConfigUI();
-
-        alert(`Loaded ${canvasConfigs.length} canvas configs.`);
-
-      } catch (err) {
-        console.error(err);
-        alert('Failed to load JSON:\n' + err.message);
+        updateDebug();
       }
-    };
 
-    reader.readAsText(file);
-  });
+      function makeLabeledInput(labelText, value, onChange) {
+        const wrapper = document.createElement('div');
 
-  function updateDebug() {
-    debug.textContent = JSON.stringify(canvasConfigs, null, 2);
-  }
+        const label = document.createElement('label');
+        label.textContent = labelText;
+        wrapper.appendChild(label);
 
-  renderConfigUI();
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.value = value;
+        input.addEventListener('input', () => {
+          const v = Number(input.value);
+          onChange(Number.isFinite(v) ? v : 0);
+          updateDebug();
+        });
 
-});
-</script>
+        wrapper.appendChild(input);
+        return wrapper;
+      }
+
+      function recalcEndXY(cfg) {
+        cfg.endX = cfg.startX + cfg.sizeX - 1;
+        cfg.endY = cfg.startY + cfg.sizeY - 1;
+      }
+
+      // ===== Export =====
+      saveJsonBtn.addEventListener('click', () => {
+        canvasConfigs.forEach(cfg => {
+          recalcEndXY(cfg);
+        });
+
+        const json = JSON.stringify(canvasConfigs, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '01_canvas_config.json';
+        document.body.appendChild(a);
+        a.click();
+
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+
+      // ===== Import =====
+      loadJsonBtn.addEventListener('click', () => {
+        jsonFileInput.value = '';
+        jsonFileInput.click();
+      });
+
+      jsonFileInput.addEventListener('change', () => {
+        const file = jsonFileInput.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(reader.result);
+
+            if (!Array.isArray(parsed)) {
+              throw new Error('JSON root is not an array');
+            }
+
+            const newConfigs = parsed.map((item, i) => {
+              if (
+                typeof item.ratio !== 'string' ||
+                !Number.isFinite(item.width) ||
+                !Number.isFinite(item.height)
+              ) {
+                throw new Error(`Invalid config at index ${i}`);
+              }
+
+              const cfg = {
+                ratio: item.ratio,
+                width: Number(item.width),
+                height: Number(item.height),
+                startX: Number(item.startX || 0),
+                startY: Number(item.startY || 0),
+                sizeX: Number(item.sizeX || 0),
+                sizeY: Number(item.sizeY || 0),
+                endX: 0,
+                endY: 0,
+              };
+
+              recalcEndXY(cfg);
+              return cfg;
+            });
+
+            canvasConfigs = newConfigs;
+            renderConfigUI();
+
+            alert(`Loaded ${canvasConfigs.length} canvas configs.`);
+
+          } catch (err) {
+            console.error(err);
+            alert('Failed to load JSON:\n' + err.message);
+          }
+        };
+
+        reader.readAsText(file);
+      });
+
+      function updateDebug() {
+        const cloned = canvasConfigs.map(cfg => {
+          const copy = { ...cfg };
+          recalcEndXY(copy);
+          return copy;
+        });
+
+        debug.textContent = JSON.stringify(cloned, null, 2);
+      }
+
+      renderConfigUI();
+
+    });
+  </script>
 
 </body>
+
 </html>
