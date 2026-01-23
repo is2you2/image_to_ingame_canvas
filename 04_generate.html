@@ -210,15 +210,26 @@
             log(`Image scanned. Unique colors: ${Object.keys(colorBuckets).length}`);
 
             // ---- 2) Canvas mapping values ----
-            const cfg = canvasConfig[0]; // 또는 선택한 aspect
-            const { startX, startY, endX, endY } = cfg;
+            const cfg = canvasConfig[0];
+
+            const baseX = cfg.startX;
+            const baseY = cfg.startY;
+
+            const displaySizeX = cfg.sizeX ?? (cfg.endX - cfg.startX);
+            const displaySizeY = cfg.sizeY ?? (cfg.endY - cfg.startY);
+
+            const scaleX = displaySizeX / imgW;
+            const scaleY = displaySizeY / imgH;
+
+            const centerOffsetX = scaleX * 0.5;
+            const centerOffsetY = scaleY * 0.5;
 
             // ---- 3) Palette-driven command generation ----
 
             for (let i = 0; i < paletteData.length; i++) {
                 const entry = paletteData[i];
                 const color = entry.color;
-                const selectCmd = entry.cmd; // 색상 선택용
+                const selectCmd = entry.cmd;
 
                 const pixels = colorBuckets[color];
                 if (!pixels || !pixels.length) {
@@ -226,25 +237,27 @@
                     continue;
                 }
 
-                // ✅ 1) 색상 선택 cmd - 딱 1번
+                // ✅ 색상 선택 cmd 1회
                 if (selectCmd && selectCmd.trim()) {
                     CMD += `${selectCmd}\n`;
                 }
 
                 log(`Processing color ${color} : ${pixels.length} pixels`);
 
-                // ✅ 2) 해당 색상 모든 픽셀에 tap
                 for (const p of pixels) {
-                    const u = p.x / (imgW - 1);
-                    const v = p.y / (imgH - 1);
+                    let mappedX =
+                        baseX +
+                        p.x * scaleX +
+                        centerOffsetX;
 
-                    let mappedX = startX + u * (endX - startX);
-                    let mappedY = startY + v * (endY - startY);
+                    let mappedY =
+                        baseY +
+                        p.y * scaleY +
+                        centerOffsetY;
 
-                    mappedX = Math.floor(mappedX);
-                    mappedY = Math.floor(mappedY);
+                    mappedX = Math.round(mappedX);
+                    mappedY = Math.round(mappedY);
 
-                    // 🔴 baseCmd 아님! 고정 tap
                     CMD += `adb shell input tap ${mappedX} ${mappedY}\n`;
                 }
             }
