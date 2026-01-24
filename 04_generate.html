@@ -265,15 +265,18 @@
                 const color = entry.color;
                 const selectCmd = entry.cmd;
 
-                const pixels = colorBuckets[color];
-                if (!pixels || !pixels.length) {
-                    log(`Palette color not found in image: ${color}`);
-                    continue;
-                }
-
-                // ✅ 색상 선택 cmd 1회
+                // ✅ 1) 색상 선택 cmd - 항상 1번 실행
                 if (selectCmd && selectCmd.trim()) {
                     CMD += `${selectCmd}\n`;
+                }
+
+                // 픽셀 가져오기
+                const pixels = colorBuckets[color];
+
+                // 픽셀이 없으면 tap만 스킵 (cmd는 이미 실행됨)
+                if (!pixels || !pixels.length) {
+                    log(`Palette color not found in image (cmd executed anyway): ${color}`);
+                    continue;
                 }
 
                 log(`Processing color ${color} : ${pixels.length} pixels`);
