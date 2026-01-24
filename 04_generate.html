@@ -89,6 +89,36 @@
 
         // ---------- Utils ----------
 
+        function parseRatioString(ratioStr) {
+            // "16:9" -> 16 / 9
+            const parts = ratioStr.split(":");
+            if (parts.length !== 2) return null;
+            const w = parseFloat(parts[0]);
+            const h = parseFloat(parts[1]);
+            if (!isFinite(w) || !isFinite(h) || h === 0) return null;
+            return w / h;
+        }
+
+        function selectBestCanvasConfigForImage(imgW, imgH, canvasConfig) {
+            const imgRatio = imgW / imgH;
+
+            let bestCfg = null;
+            let bestDiff = Infinity;
+
+            for (const cfg of canvasConfig) {
+                const cfgRatio = parseRatioString(cfg.ratio);
+                if (!cfgRatio) continue;
+
+                const diff = Math.abs(cfgRatio - imgRatio);
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestCfg = cfg;
+                }
+            }
+
+            return bestCfg;
+        }
+
         function hexToRgb(hex) {
             hex = hex.replace("#", "");
             return {
@@ -210,7 +240,11 @@
             log(`Image scanned. Unique colors: ${Object.keys(colorBuckets).length}`);
 
             // ---- 2) Canvas mapping values ----
-            const cfg = canvasConfig[0];
+            const cfg = selectBestCanvasConfigForImage(imgW, imgH, canvasConfig);
+            if (!cfg) {
+                throw new Error("No matching canvas config found for image ratio");
+            }
+            log(`Auto-selected canvas ratio: ${cfg.ratio} for image ${imgW}x${imgH}`);
 
             const baseX = cfg.startX;
             const baseY = cfg.startY;
