@@ -120,17 +120,21 @@
 
             let drawW, drawH;
 
+            // ✅ COVER 로직 (Math.max 개념)
             if (imgRatio > canvasRatio) {
-                drawW = canvasW;
-                drawH = canvasW / imgRatio;
-            } else {
+                // 이미지가 더 가로로 김 → 높이에 맞추고 좌우 crop
                 drawH = canvasH;
                 drawW = canvasH * imgRatio;
+            } else {
+                // 이미지가 더 세로로 김 → 너비에 맞추고 상하 crop
+                drawW = canvasW;
+                drawH = canvasW / imgRatio;
             }
 
             drawW *= scale;
             drawH *= scale;
 
+            // 중심 기준 crop (offset이 음수가 될 수 있음)
             const drawX = (canvasW - drawW) / 2;
             const drawY = (canvasH - drawH) / 2;
 
