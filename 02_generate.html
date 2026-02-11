@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Aspect → Remap → Generate (Unified)</title>
+
+    <style>
+        body {
+            background: #111;
+            color: #eee;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 10px;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        .panel {
+            border: 1px solid #444;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        label {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        input[type="file"],
+        textarea,
+        select,
+        button {
+            background: #222;
+            color: #eee;
+            border: 1px solid #555;
+            padding: 4px 6px;
+        }
+
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        #log {
+            white-space: pre-wrap;
+            font-size: 12px;
+            background: #000;
+            padding: 6px;
+            max-height: 160px;
+            overflow: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Aspect → Palette Remap → ADB Generate</h2>
+
+    <!-- ================= TOP CONFIG ================= -->
+
+    <div class="panel">
+        <h3>0) Load Config Files</h3>
+
+        <div class="row">
+            <label>
+                Aspect / Canvas Config JSON
+                <input type="file" id="aspectConfigInput" accept=".json">
+            </label>
+
+            <label>
+                Palette JSON
+                <input type="file" id="paletteInput" accept=".json">
+            </label>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>0-1) Start Script (run once)</h3>
+        <textarea id="startCmdInput" rows="5" placeholder="예:
+adb shell am start -n com.example/.MainActivity
+sleep 2
+"></textarea>
+    </div>
+
+    <div class="panel">
+        <h3>Status</h3>
+        <div id="log">Waiting for config files...</div>
+    </div>
+
+    <script>
+        /* =================================================
+           GLOBAL CONTEXT
+        ================================================= */
+
+        const CTX = {
+            // configs
+            aspectConfig: null,
+            palette: null,
+
+            // images / canvases (filled later)
+            sourceImage: null,
+            aspectCanvas: null,
+            aspectCtx: null,
+
+            remapCanvas: null,
+            remapCtx: null,
+
+            // runtime
+            selectedRatio: null,
+            scale: 1,
+
+            // generated script
+            bashScript: ""
+        };
+
+        /* =================================================
+           UI ELEMENTS
+        ================================================= */
+
+        const aspectConfigInput = document.getElementById("aspectConfigInput");
+        const paletteInput = document.getElementById("paletteInput");
+        const startCmdInput = document.getElementById("startCmdInput");
+        const logEl = document.getElementById("log");
+
+        /* =================================================
+           LOG
+        ================================================= */
+
+        function log(msg) {
+            logEl.textContent += msg + "\n";
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        /* =================================================
+           JSON LOADERS
+        ================================================= */
+
+        aspectConfigInput.addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    CTX.aspectConfig = JSON.parse(reader.result);
+                    log("Aspect / Canvas config loaded.");
+                    checkReady();
+                } catch (err) {
+                    alert("Aspect config JSON error:\n" + err.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        paletteInput.addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    CTX.palette = JSON.parse(reader.result);
+                    log("Palette JSON loaded.");
+                    checkReady();
+                } catch (err) {
+                    alert("Palette JSON error:\n" + err.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        /* =================================================
+           READY CHECK
+        ================================================= */
+
+        function checkReady() {
+            if (!CTX.aspectConfig || !CTX.palette) return;
+            log("All base configs ready.");
+            // STEP 1 UI will be enabled in PART 2
+        }
+    </script>
+
+    <!-- ================= STEP 1 : ASPECT CANVAS ================= -->
+
+    <div class="panel">
+        <h3>1) Aspect Canvas</h3>
+
+        <div class="row">
+            <label>
+                Source Image
+                <input type="file" id="imageInput" accept="image/*">
+            </label>
+
+            <label>
+                Aspect Ratio
+                <select id="ratioSelect"></select>
+            </label>
+
+            <label>
+                Scale
+                <input type="range" id="scaleInput" min="0.25" max="4" step="0.05" value="1">
+            </label>
+
+            <span id="scaleLabel">1.00×</span>
+        </div>
+
+        <canvas id="aspectCanvas" style="margin-top:10px; background:#000;"></canvas>
+    </div>
+
+    <script>
+        /* =================================================
+           STEP 1 UI ELEMENTS
+        ================================================= */
+
+        const imageInput = document.getElementById("imageInput");
+        const ratioSelect = document.getElementById("ratioSelect");
+        const scaleInput = document.getElementById("scaleInput");
+        const scaleLabel = document.getElementById("scaleLabel");
+
+        CTX.aspectCanvas = document.getElementById("aspectCanvas");
+        CTX.aspectCtx = CTX.aspectCanvas.getContext("2d");
+
+        /* =================================================
+           POPULATE RATIO SELECT
+        ================================================= */
+
+        function populateRatioSelect() {
+            ratioSelect.innerHTML = "";
+
+            for (const ratio in CTX.aspectConfig) {
+                const opt = document.createElement("option");
+                opt.value = ratio;
+                opt.textContent = ratio;
+                ratioSelect.appendChild(opt);
+            }
+
+            CTX.selectedRatio = ratioSelect.value;
+        }
+
+        /* =================================================
+           IMAGE LOADING
+        ================================================= */
+
+        imageInput.addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const img = new Image();
+            img.onload = () => {
+                CTX.sourceImage = img;
+                log(`Source image loaded: ${img.width}×${img.height}`);
+                redrawAspectCanvas();
+            };
+            img.src = URL.createObjectURL(file);
+        });
+
+        /* =================================================
+           RATIO / SCALE EVENTS
+        ================================================= */
+
+        ratioSelect.addEventListener("change", () => {
+            CTX.selectedRatio = ratioSelect.value;
+            redrawAspectCanvas();
+        });
+
+        scaleInput.addEventListener("input", () => {
+            CTX.scale = parseFloat(scaleInput.value);
+            scaleLabel.textContent = CTX.scale.toFixed(2) + "×";
+            redrawAspectCanvas();
+        });
+
+        /* =================================================
+           CENTER-COVER DRAW
+        ================================================= */
+
+        function redrawAspectCanvas() {
+            if (!CTX.sourceImage || !CTX.selectedRatio) return;
+
+            const cfg = CTX.aspectConfig[CTX.selectedRatio];
+            if (!cfg) return;
+
+            const cw = Math.round(cfg.width * CTX.scale);
+            const ch = Math.round(cfg.height * CTX.scale);
+
+            const canvas = CTX.aspectCanvas;
+            const ctx = CTX.aspectCtx;
+
+            canvas.width = cw;
+            canvas.height = ch;
+
+            const img = CTX.sourceImage;
+
+            const scale = Math.max(
+                cw / img.width,
+                ch / img.height
+            );
+
+            const drawW = img.width * scale;
+            const drawH = img.height * scale;
+
+            const dx = (cw - drawW) / 2;
+            const dy = (ch - drawH) / 2;
+
+            ctx.clearRect(0, 0, cw, ch);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, dx, dy, drawW, drawH);
+
+            log(`Aspect canvas updated (${CTX.selectedRatio}, scale ${CTX.scale.toFixed(2)})`);
+        }
+
+        /* =================================================
+           ENABLE STEP 1 WHEN CONFIG READY
+        ================================================= */
+
+        (function waitForConfig() {
+            if (!CTX.aspectConfig) {
+                setTimeout(waitForConfig, 100);
+                return;
+            }
+            populateRatioSelect();
+        })();
+    </script>
+    <!-- ================= STEP 2 : PALETTE REMAP ================= -->
+
+    <div class="panel">
+        <h3>2) Palette Remap (Preview)</h3>
+
+        <div class="row">
+            <button id="remapBtn">Remap Image</button>
+            <span id="remapStatus">Waiting...</span>
+        </div>
+
+        <canvas id="remapCanvas" style="margin-top:10px; background:#000;"></canvas>
+    </div>
+
+    <script>
+        /* =================================================
+           STEP 2 ELEMENTS
+        ================================================= */
+
+        const remapBtn = document.getElementById("remapBtn");
+        const remapStatus = document.getElementById("remapStatus");
+
+        CTX.remapCanvas = document.getElementById("remapCanvas");
+        CTX.remapCtx = CTX.remapCanvas.getContext("2d");
+
+        /* =================================================
+           PALETTE UTILS
+        ================================================= */
+
+        function hexToRgb(hex) {
+            hex = hex.replace("#", "");
+            return {
+                r: parseInt(hex.slice(0, 2), 16),
+                g: parseInt(hex.slice(2, 4), 16),
+                b: parseInt(hex.slice(4, 6), 16)
+            };
+        }
+
+        function colorDistance(a, b) {
+            const dr = a.r - b.r;
+            const dg = a.g - b.g;
+            const db = a.b - b.b;
+            return dr * dr + dg * dg + db * db;
+        }
+
+        function findNearestPaletteColor(rgb) {
+            let best = null;
+            let bestDist = Infinity;
+
+            for (const p of CTX.palette) {
+                const d = colorDistance(rgb, hexToRgb(p.color));
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = p;
+                }
+            }
+            return best;
+        }
+
+        /* =================================================
+           REMAP CORE
+        ================================================= */
+
+        remapBtn.addEventListener("click", () => {
+            if (!CTX.palette || !CTX.palette.length) {
+                alert("Palette JSON not loaded");
+                return;
+            }
+            if (!CTX.aspectCanvas.width) {
+                alert("Aspect canvas is empty");
+                return;
+            }
+
+            remapImage();
+        });
+
+        function remapImage() {
+            remapStatus.textContent = "Processing...";
+
+            const srcCanvas = CTX.aspectCanvas;
+            const srcCtx = CTX.aspectCtx;
+
+            const w = srcCanvas.width;
+            const h = srcCanvas.height;
+
+            const dstCanvas = CTX.remapCanvas;
+            const dstCtx = CTX.remapCtx;
+
+            dstCanvas.width = w;
+            dstCanvas.height = h;
+
+            const srcData = srcCtx.getImageData(0, 0, w, h).data;
+            const outImage = dstCtx.createImageData(w, h);
+            const out = outImage.data;
+
+            for (let i = 0; i < srcData.length; i += 4) {
+                const r = srcData[i];
+                const g = srcData[i + 1];
+                const b = srcData[i + 2];
+                const a = srcData[i + 3];
+
+                if (a === 0) {
+                    out[i] = 0;
+                    out[i + 1] = 0;
+                    out[i + 2] = 0;
+                    out[i + 3] = 0;
+                    continue;
+                }
+
+                const nearest = findNearestPaletteColor({ r, g, b });
+
+                if (nearest) {
+                    const color = hexToRgb(nearest.color);
+                    out[i] = color.r;
+                    out[i + 1] = color.g;
+                    out[i + 2] = color.b;
+                    out[i + 3] = a;
+                } else {
+                    out[i] = r;
+                    out[i + 1] = g;
+                    out[i + 2] = b;
+                    out[i + 3] = a;
+                }
+            }
+
+            dstCtx.putImageData(outImage, 0, 0);
+
+            CTX.remappedImageReady = true;
+            remapStatus.textContent = `Done (${w}×${h})`;
+
+            log(`Palette remap complete (${w}x${h})`);
+        }
+    </script>
+    <!-- ================= STEP 3 : GENERATE (SILENT) ================= -->
+
+    <div class="panel">
+        <h3>3) Generate ADB Script</h3>
+
+        <button id="exportBtn" disabled>Export bash</button>
+        <div id="genStatus" style="margin-top:6px;">Waiting...</div>
+    </div>
+
+    <script>
+        /* =================================================
+           STEP 3 ELEMENTS
+        ================================================= */
+
+        const exportBtn = document.getElementById("exportBtn");
+        const genStatus = document.getElementById("genStatus");
+
+        /* =================================================
+           UTILS
+        ================================================= */
+
+        function rgbToHex(r, g, b) {
+            return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
+        }
+
+        function parseRatioString(ratioStr) {
+            const [w, h] = ratioStr.split(":").map(Number);
+            if (!w || !h) return null;
+            return w / h;
+        }
+
+        function selectBestCanvasConfigForImage(w, h, cfgArr) {
+            const r = w / h;
+            let best = null;
+            let bestDiff = Infinity;
+
+            for (const cfg of cfgArr) {
+                const cr = parseRatioString(cfg.ratio);
+                if (!cr) continue;
+                const diff = Math.abs(cr - r);
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    best = cfg;
+                }
+            }
+            return best;
+        }
+
+        /* =================================================
+           ENABLE EXPORT WHEN REMAP READY
+        ================================================= */
+
+        (function watchRemap() {
+            if (CTX.remappedImageReady) {
+                exportBtn.disabled = false;
+                genStatus.textContent = "Ready to export";
+                return;
+            }
+            setTimeout(watchRemap, 200);
+        })();
+
+        /* =================================================
+           GENERATE CORE
+        ================================================= */
+
+        exportBtn.addEventListener("click", () => {
+            try {
+                const bash = generateBash();
+                downloadBash(bash);
+                genStatus.textContent = "Exported";
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        function generateBash() {
+            if (!CTX.remapCanvas || !CTX.palette || !CTX.aspectConfig) {
+                throw new Error("Missing required data");
+            }
+
+            let CMD = "#!/bin/bash\n\n";
+
+            if (CTX.startScript && CTX.startScript.trim()) {
+                CMD += CTX.startScript.trim() + "\n\n";
+            }
+
+            const canvas = CTX.remapCanvas;
+            const ctx = CTX.remapCtx;
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            const imgData = ctx.getImageData(0, 0, w, h).data;
+
+            /* ---------- 1) Color buckets ---------- */
+
+            const buckets = {}; // "#rrggbb" -> [{x,y}]
+
+            let idx = 0;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const r = imgData[idx];
+                    const g = imgData[idx + 1];
+                    const b = imgData[idx + 2];
+                    const a = imgData[idx + 3];
+                    idx += 4;
+
+                    if (a === 0) continue;
+
+                    const hex = rgbToHex(r, g, b);
+                    if (!buckets[hex]) buckets[hex] = [];
+                    buckets[hex].push({ x, y });
+                }
+            }
+
+            /* ---------- 2) Canvas mapping ---------- */
+
+            const cfg = selectBestCanvasConfigForImage(w, h, CTX.aspectConfig);
+            if (!cfg) throw new Error("No matching canvas config");
+
+            const baseX = cfg.startX;
+            const baseY = cfg.startY;
+
+            const sizeX = cfg.sizeX ?? (cfg.endX - cfg.startX);
+            const sizeY = cfg.sizeY ?? (cfg.endY - cfg.startY);
+
+            const scaleX = sizeX / w;
+            const scaleY = sizeY / h;
+
+            const offsetX = scaleX * 0.5;
+            const offsetY = scaleY * 0.5;
+
+            /* ---------- 3) Palette-driven commands ---------- */
+
+            for (const entry of CTX.palette) {
+                const color = entry.color;
+                const cmd = entry.cmd;
+
+                if (cmd && cmd.trim()) {
+                    CMD += cmd + "\n";
+                }
+
+                const pixels = buckets[color];
+                if (!pixels || !pixels.length) continue;
+
+                for (const p of pixels) {
+                    const x = Math.round(baseX + p.x * scaleX + offsetX);
+                    const y = Math.round(baseY + p.y * scaleY + offsetY);
+                    CMD += `adb shell input tap ${x} ${y}\n`;
+                }
+            }
+
+            return CMD;
+        }
+
+        /* =================================================
+           EXPORT
+        ================================================= */
+
+        function downloadBash(text) {
+            const blob = new Blob([text], { type: "text/plain" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "auto_input.bash";
+            a.click();
+        }
+    </script>
+</body>
+
+</html>
