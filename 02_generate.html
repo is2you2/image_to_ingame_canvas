@@ -612,6 +612,7 @@ sleep 2
 
                 if (cmd && cmd.trim()) {
                     CMD += cmd + "\n";
+                    CMD += "sleep 0.01\n";
                 }
 
                 const pixels = buckets[color];
