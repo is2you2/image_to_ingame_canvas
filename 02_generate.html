@@ -553,6 +553,7 @@ sleep 2
             }
 
             let CMD = "#!/bin/bash\n\n";
+            CMD += "SECONDS=0\n";
 
             if (CTX.startScript && CTX.startScript.trim()) {
                 CMD += CTX.startScript.trim() + "\n\n";
@@ -612,7 +613,7 @@ sleep 2
 
                 if (cmd && cmd.trim()) {
                     CMD += cmd + "\n";
-                    CMD += "sleep 0.01\n";
+                    CMD += "sleep 0.05\n";
                 }
 
                 const pixels = buckets[color];
@@ -624,13 +625,16 @@ sleep 2
                 for (const p of pixels) {
                     const x = Math.round(baseX + p.x * scaleX + offsetX);
                     const y = Math.round(baseY + p.y * scaleY + offsetY);
-                    CMD += `input swipe ${x} ${y} ${x} ${y} 20\n`;
-                    CMD += "sleep 0.01\n";
+                    CMD += `input tap ${x} ${y}\n`;
+                    CMD += `input tap ${x} ${y}\n`;
+                    CMD += `input tap ${x} ${y}\n`;
                 }
 
                 /* 여기서 adb shell 종료 */
                 CMD += "EOF\n";
             }
+
+            CMD += 'echo "Elapsed time: $SECONDS sec"';
 
             return CMD;
         }
