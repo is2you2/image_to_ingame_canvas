@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Image Splitter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+body{
+    font-family:sans-serif;
+    padding:40px;
+}
+</style>
+</head>
+<body>
+
+<h2>Image Splitter (18 tiles)</h2>
+<input type="file" id="fileInput" accept="image/*">
+
+<script>
+
+const tileWidth = 114;
+const tileHeight = 150;
+
+const stepX = 113;
+const stepY = 139;
+
+const cols = 6;
+const rows = 3;
+
+document.getElementById("fileInput").addEventListener("change", async function(e){
+
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+
+    await img.decode();
+
+    const zip = new JSZip();
+
+    for(let row=0; row<rows; row++){
+        for(let col=0; col<cols; col++){
+
+            const x = col * stepX;
+            const y = row * stepY;
+
+            const canvas = document.createElement("canvas");
+            canvas.width = tileWidth;
+            canvas.height = tileHeight;
+
+            const ctx = canvas.getContext("2d");
+
+            ctx.drawImage(
+                img,
+                x, y,
+                tileWidth, tileHeight,
+                0, 0,
+                tileWidth, tileHeight
+            );
+
+            const blob = await new Promise(resolve =>
+                canvas.toBlob(resolve,"image/png")
+            );
+
+            const filename = `${row}${col}.png`;
+
+            zip.file(filename, blob);
+        }
+    }
+
+    const zipBlob = await zip.generateAsync({type:"blob"});
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = "cropped_images.zip";
+    a.click();
+
+});
+
+</script>
+
+</body>
+</html>
