@@ -554,6 +554,13 @@ sleep 2
 
             let CMD = "#!/bin/bash\n\n";
             CMD += "SECONDS=0\n";
+            CMD += `(
+while true; do
+    printf "\r⏱ %02d:%02d" $((SECONDS/60)) $((SECONDS%60))
+    sleep 1
+done
+) &
+TIMER_PID=$!\n`;
 
             if (CTX.startScript && CTX.startScript.trim()) {
                 CMD += CTX.startScript.trim() + "\n\n";
@@ -643,7 +650,10 @@ sleep 2
                 CMD += "EOF\n";
             }
 
-            CMD += 'echo "Elapsed time: $SECONDS sec"';
+            CMD += `kill $TIMER_PID 2>/dev/null
+wait $TIMER_PID 2>/dev/null
+echo
+printf "✔ Total: %02d:%02d\n" $((SECONDS/60)) $((SECONDS%60))`;
 
             return CMD;
         }
