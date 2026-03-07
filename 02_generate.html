@@ -619,18 +619,27 @@ sleep 2
                 const pixels = buckets[color];
                 if (!pixels || !pixels.length) continue;
 
-                /* 여기서 adb shell 시작 */
+                let count = 0;
+
                 CMD += "adb shell <<'EOF'\n";
 
                 for (const p of pixels) {
                     const x = Math.round(baseX + p.x * scaleX + offsetX);
                     const y = Math.round(baseY + p.y * scaleY + offsetY);
+
                     CMD += `input tap ${x} ${y}\n`;
                     CMD += `input tap ${x} ${y}\n`;
                     CMD += `input tap ${x} ${y}\n`;
+
+                    count++;
+
+                    if (count % 50 === 0) {
+                        CMD += "EOF\n";
+                        CMD += "sleep 1\n";
+                        CMD += "adb shell <<'EOF'\n";
+                    }
                 }
 
-                /* 여기서 adb shell 종료 */
                 CMD += "EOF\n";
             }
 
