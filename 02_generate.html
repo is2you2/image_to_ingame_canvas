@@ -493,6 +493,85 @@ sleep 2
            UTILS
         ================================================= */
 
+        function keyXY(x, y) {
+            return x + "," + y;
+        }
+
+        function parseKey(k) {
+            const [x, y] = k.split(",").map(Number);
+            return { x, y };
+        }
+
+        function buildGreedyPaths(pixels) {
+
+            const set = new Set();
+
+            for (const p of pixels) {
+                set.add(keyXY(p.x, p.y));
+            }
+
+            const paths = [];
+
+            const dirs = [
+                [1, 0],
+                [-1, 0],
+                [0, 1],
+                [0, -1]
+            ];
+
+            while (set.size > 0) {
+
+                const startKey = set.values().next().value;
+                set.delete(startKey);
+
+                const path = [parseKey(startKey)];
+
+                let cx = path[0].x;
+                let cy = path[0].y;
+
+                while (true) {
+
+                    let found = false;
+
+                    for (const [dx, dy] of dirs) {
+
+                        const nx = cx + dx;
+                        const ny = cy + dy;
+
+                        const nk = keyXY(nx, ny);
+
+                        if (set.has(nk)) {
+
+                            set.delete(nk);
+
+                            path.push({ x: nx, y: ny });
+
+                            cx = nx;
+                            cy = ny;
+
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) break;
+                }
+
+                paths.push(path);
+            }
+
+            return paths;
+        }
+
+        function computePathDuration(steps) {
+
+            const base = 18;
+            const perStep = 7;
+            const max = 220;
+
+            return Math.min(base + steps * perStep, max);
+        }
+
         function rgbToHex(r, g, b) {
             return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
         }
@@ -676,40 +755,53 @@ TIMER_PID=$!\n`;
                 const pixels = buckets[color];
                 if (!pixels || !pixels.length) continue;
 
+                const paths = buildGreedyPaths(pixels);
+
                 let count = 0;
 
                 CMD += "adb shell <<'EOF'\n";
 
-                const runs = buildHorizontalRuns(pixels);
+                for (const path of paths) {
 
-                for (const run of runs) {
+                    if (path.length === 1) {
 
-                    const x1 = Math.round(baseX + run.x1 * scaleX + offsetX);
-                    const y = Math.round(baseY + run.y * scaleY + offsetY);
-                    const x2 = Math.round(baseX + run.x2 * scaleX + offsetX);
+                        const p = path[0];
 
-                    if (run.x1 === run.x2) {
+                        const x = Math.round(baseX + p.x * scaleX + offsetX);
+                        const y = Math.round(baseY + p.y * scaleY + offsetY);
 
-                        CMD += `input tap ${x1} ${y}\n`;
-                        CMD += `input tap ${x1} ${y}\n`;
+                        CMD += `input tap ${x} ${y}\n`;
+                        CMD += `input tap ${x} ${y}\n`;
+
+                        count++;
 
                     } else {
 
-                        const length = run.x2 - run.x1 + 1;
-                        const duration = computeSwipeDuration(length);
+                        for (let i = 0; i < path.length - 1; i++) {
 
-                        CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
-                        CMD += "sleep .2\n";
-                        CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
-                        CMD += "sleep .2\n";
+                            const a = path[i];
+                            const b = path[i + 1];
 
-                        // 끝 픽셀 보강
-                        CMD += `input tap ${x1} ${y}\n`;
-                        CMD += `input tap ${x1} ${y}\n`;
-                        CMD += `input tap ${x2} ${y}\n`;
-                        CMD += `input tap ${x2} ${y}\n`;
+                            const x1 = Math.round(baseX + a.x * scaleX + offsetX);
+                            const y1 = Math.round(baseY + a.y * scaleY + offsetY);
+
+                            const x2 = Math.round(baseX + b.x * scaleX + offsetX);
+                            const y2 = Math.round(baseY + b.y * scaleY + offsetY);
+
+                            const duration = computePathDuration(1);
+
+                            CMD += `input swipe ${x1} ${y1} ${x2} ${y2} ${duration}\n`;
+
+                            count++;
+
+                            if (count % 120 === 0) {
+
+                                CMD += "EOF\n";
+                                CMD += "sleep 0.4\n";
+                                CMD += "adb shell <<'EOF'\n";
+                            }
+                        }
                     }
-
                 }
 
                 CMD += "EOF\n";
