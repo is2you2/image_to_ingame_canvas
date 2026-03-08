@@ -547,6 +547,56 @@ sleep 2
             }
         });
 
+        function computeSwipeDuration(pxLength) {
+
+            const base = 20;      // 최소 duration
+            const factor = 12;     // 픽셀당 추가 ms
+            const max = 600;      // 너무 길어지는 것 방지
+
+            const d = base + pxLength * factor;
+
+            return Math.min(d, max);
+        }
+
+        function buildHorizontalRuns(pixels) {
+
+            const rows = new Map();
+
+            for (const p of pixels) {
+                if (!rows.has(p.y)) rows.set(p.y, []);
+                rows.get(p.y).push(p.x);
+            }
+
+            const runs = [];
+
+            for (const [y, xs] of rows) {
+
+                xs.sort((a, b) => a - b);
+
+                let start = xs[0];
+                let prev = xs[0];
+
+                for (let i = 1; i < xs.length; i++) {
+
+                    const x = xs[i];
+
+                    if (x === prev + 1) {
+                        prev = x;
+                        continue;
+                    }
+
+                    runs.push({ y, x1: start, x2: prev });
+
+                    start = x;
+                    prev = x;
+                }
+
+                runs.push({ y, x1: start, x2: prev });
+            }
+
+            return runs;
+        }
+
         function generateBash() {
             if (!CTX.remapCanvas || !CTX.palette || !CTX.aspectConfig) {
                 throw new Error("Missing required data");
@@ -630,21 +680,36 @@ TIMER_PID=$!\n`;
 
                 CMD += "adb shell <<'EOF'\n";
 
-                for (const p of pixels) {
-                    const x = Math.round(baseX + p.x * scaleX + offsetX);
-                    const y = Math.round(baseY + p.y * scaleY + offsetY);
+                const runs = buildHorizontalRuns(pixels);
 
-                    CMD += `input tap ${x} ${y}\n`;
-                    CMD += `input tap ${x} ${y}\n`;
-                    CMD += `input tap ${x} ${y}\n`;
+                for (const run of runs) {
 
-                    count++;
+                    const x1 = Math.round(baseX + run.x1 * scaleX + offsetX);
+                    const y = Math.round(baseY + run.y * scaleY + offsetY);
+                    const x2 = Math.round(baseX + run.x2 * scaleX + offsetX);
 
-                    if (count % 50 === 0) {
-                        CMD += "EOF\n";
-                        CMD += "sleep 1\n";
-                        CMD += "adb shell <<'EOF'\n";
+                    if (run.x1 === run.x2) {
+
+                        CMD += `input tap ${x1} ${y}\n`;
+                        CMD += `input tap ${x1} ${y}\n`;
+
+                    } else {
+
+                        const length = run.x2 - run.x1 + 1;
+                        const duration = computeSwipeDuration(length);
+
+                        CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
+                        CMD += "sleep .2\n";
+                        CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
+                        CMD += "sleep .2\n";
+
+                        // 끝 픽셀 보강
+                        CMD += `input tap ${x1} ${y}\n`;
+                        CMD += `input tap ${x1} ${y}\n`;
+                        CMD += `input tap ${x2} ${y}\n`;
+                        CMD += `input tap ${x2} ${y}\n`;
                     }
+
                 }
 
                 CMD += "EOF\n";
