@@ -653,7 +653,17 @@ TIMER_PID=$!\n`;
             CMD += `kill $TIMER_PID 2>/dev/null
 wait $TIMER_PID 2>/dev/null
 echo
-printf "✔ Total: %02d:%02d\n" $((SECONDS/60)) $((SECONDS%60))`;
+printf "✔ Total: %02d:%02d\n" $((SECONDS/60)) $((SECONDS%60))
+echo -e "\a"
+sleep 0.1
+echo -e "\a"
+sleep 0.1
+echo -e "\a"
+sleep 0.1
+echo -e "\a"
+sleep 0.1
+echo -e "\a"
+`;
 
             return CMD;
         }
