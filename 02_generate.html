@@ -719,8 +719,12 @@ TIMER_PID=$!\n`;
                         const duration = computeSwipeDuration(dist);
 
                         CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
+                        CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
+                        CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
                         CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
                         CMD += `input tap ${x1} ${y}\n`;
+                        CMD += `input tap ${x1} ${y}\n`;
+                        CMD += `input tap ${x2} ${y}\n`;
                         CMD += `input tap ${x2} ${y}\n`;
 
 
