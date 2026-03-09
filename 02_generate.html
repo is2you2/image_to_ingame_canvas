@@ -762,8 +762,8 @@ TIMER_PID=$!\n`;
                     // 필요 시 역방향 추가 (앱에 따라 선 두께/안정성 향상)
                     CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
 
-                    CMD += `input tap ${x1} ${y}\n`;
                     CMD += `input tap ${x2} ${y}\n`;
+                    CMD += `input tap ${x1} ${y}\n`;
 
                     // 처리한 픽셀 제거
                     for (let x = run.x1; x <= run.x2; x++) {
@@ -795,8 +795,8 @@ TIMER_PID=$!\n`;
                     // 필요 시 역방향
                     CMD += `input swipe ${x} ${y2} ${x} ${y1} ${duration}\n`;
 
-                    CMD += `input tap ${x} ${y1}\n`;
                     CMD += `input tap ${x} ${y2}\n`;
+                    CMD += `input tap ${x} ${y1}\n`;
 
                     // 처리한 픽셀 제거
                     for (let y = run.y1; y <= run.y2; y++) {
@@ -805,12 +805,24 @@ TIMER_PID=$!\n`;
                 }
 
                 // ────────────────────────────────
-                // 3. 최종 남은 픽셀 → tap
+                // 3. 최종 남은 픽셀 → tap (셔플 적용)
                 // ────────────────────────────────
-                for (const key of remaining) {
+
+                // 먼저 배열로 모음
+                let remainingList = Array.from(remaining).map(key => {
                     const [px, py] = key.split(',').map(Number);
-                    const tx = Math.round(baseX + px * scaleX + offsetX);
-                    const ty = Math.round(baseY + py * scaleY + offsetY);
+                    return { x: px, y: py };
+                });
+
+                // Fisher-Yates shuffle (현대적이고 편향 없는 섞기)
+                for (let i = remainingList.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [remainingList[i], remainingList[j]] = [remainingList[j], remainingList[i]];
+                }
+
+                for (const p of remainingList) {
+                    const tx = Math.round(baseX + p.x * scaleX + offsetX);
+                    const ty = Math.round(baseY + p.y * scaleY + offsetY);
                     CMD += `input tap ${tx} ${ty}\n`;
                     CMD += `input tap ${tx} ${ty}\n`;
                 }
