@@ -502,67 +502,6 @@ sleep 2
             return { x, y };
         }
 
-        function buildGreedyPaths(pixels) {
-
-            const set = new Set();
-
-            for (const p of pixels) {
-                set.add(keyXY(p.x, p.y));
-            }
-
-            const paths = [];
-
-            const dirs = [
-                [1, 0],
-                [-1, 0],
-                [0, 1],
-                [0, -1]
-            ];
-
-            while (set.size > 0) {
-
-                const startKey = set.values().next().value;
-                set.delete(startKey);
-
-                const path = [parseKey(startKey)];
-
-                let cx = path[0].x;
-                let cy = path[0].y;
-
-                while (true) {
-
-                    let found = false;
-
-                    for (const [dx, dy] of dirs) {
-
-                        const nx = cx + dx;
-                        const ny = cy + dy;
-
-                        const nk = keyXY(nx, ny);
-
-                        if (set.has(nk)) {
-
-                            set.delete(nk);
-
-                            path.push({ x: nx, y: ny });
-
-                            cx = nx;
-                            cy = ny;
-
-                            found = true;
-                            break;
-                        }
-                    }
-
-                    if (!found) break;
-                }
-
-                paths.push(path);
-            }
-
-            return paths;
-        }
-
         function rgbToHex(r, g, b) {
             return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
         }
@@ -770,7 +709,7 @@ TIMER_PID=$!\n`;
 
                     const dist = Math.abs(r.x2 - r.x1);
 
-                    if (dist === 0) {
+                    if (dist < 10) {
 
                         CMD += `input tap ${x1} ${y}\n`;
 
