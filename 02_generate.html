@@ -684,6 +684,7 @@ TIMER_PID=$!\n`;
             const offsetY = scaleY * 0.5;
 
             /* ---------- 3) Palette-driven commands ---------- */
+            /* 가로선(swipe) + 나머지 모두 tap 버전 */
 
             for (const entry of CTX.palette) {
                 const color = entry.color;
@@ -697,42 +698,52 @@ TIMER_PID=$!\n`;
                 const pixels = buckets[color];
                 if (!pixels || !pixels.length) continue;
 
-                let count = 0;
+                // 1. 수평 연속 선분만 찾아서 swipe 처리
+                const hRuns = buildHorizontalRuns(pixels);
 
-                const runs = buildHorizontalRuns(pixels);
+                const covered = new Set();
+                for (const run of hRuns) {
+                    const x1 = Math.round(baseX + run.x1 * scaleX + offsetX);
+                    const x2 = Math.round(baseX + run.x2 * scaleX + offsetX);
+                    const y = Math.round(baseY + run.y * scaleY + offsetY);
 
-                for (const r of runs) {
+                    const length = run.x2 - run.x1;
 
-                    const x1 = Math.round(baseX + r.x1 * scaleX + offsetX);
-                    const x2 = Math.round(baseX + r.x2 * scaleX + offsetX);
-                    const y = Math.round(baseY + r.y * scaleY + offsetY);
+                    if (length >= 12) {  // ← 최소 길이 기준 (조정 가능: 3~8 사이 추천)
+                        const duration = computeSwipeDuration(length);
 
-                    const dist = Math.abs(r.x2 - r.x1);
+                        CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
+                        CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
+                        // 필요하면 역방향 swipe 추가 (앱에 따라 다름)
+                        // CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
 
-                    if (dist < 20) {
-
+                        // 양 끝 tap은 선택사항 (선이 끊어지는 앱이면 넣기)
                         CMD += `input tap ${x1} ${y}\n`;
-                        CMD += `input tap ${x1} ${y}\n`;
-
+                        CMD += `input tap ${x2} ${y}\n`;
                     } else {
-
-                        const duration = computeSwipeDuration(dist);
-
-                        CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
-                        CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
-                        CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
-                        CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
-                        CMD += `input tap ${x1} ${y}\n`;
-                        CMD += `input tap ${x1} ${y}\n`;
-                        CMD += `input tap ${x2} ${y}\n`;
-                        CMD += `input tap ${x2} ${y}\n`;
-
-
+                        // 짧은 run은 그냥 tap 여러 번
+                        for (let x = run.x1; x <= run.x2; x++) {
+                            const tx = Math.round(baseX + x * scaleX + offsetX);
+                            CMD += `input tap ${tx} ${y}\n`;
+                            CMD += `input tap ${tx} ${y}\n`;
+                        }
                     }
 
-                    count++;
+                    // 커버된 픽셀 기록
+                    for (let x = run.x1; x <= run.x2; x++) {
+                        covered.add(keyXY(x, run.y));
+                    }
                 }
 
+                // 2. 수평으로 커버되지 않은 픽셀들 → 개별 tap
+                for (const p of pixels) {
+                    const key = keyXY(p.x, p.y);
+                    if (covered.has(key)) continue;
+
+                    const x = Math.round(baseX + p.x * scaleX + offsetX);
+                    const y = Math.round(baseY + p.y * scaleY + offsetY);
+                    CMD += `input tap ${x} ${y}\n`;
+                }
             }
 
             CMD += `kill $TIMER_PID 2>/dev/null
