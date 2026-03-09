@@ -709,8 +709,9 @@ TIMER_PID=$!\n`;
 
                     const dist = Math.abs(r.x2 - r.x1);
 
-                    if (dist < 10) {
+                    if (dist < 20) {
 
+                        CMD += `input tap ${x1} ${y}\n`;
                         CMD += `input tap ${x1} ${y}\n`;
 
                     } else {
