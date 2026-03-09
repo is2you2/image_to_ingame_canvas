@@ -563,15 +563,6 @@ sleep 2
             return paths;
         }
 
-        function computePathDuration(steps) {
-
-            const base = 18;
-            const perStep = 7;
-            const max = 220;
-
-            return Math.min(base + steps * perStep, max);
-        }
-
         function rgbToHex(r, g, b) {
             return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
         }
@@ -637,18 +628,32 @@ sleep 2
             return Math.min(d, max);
         }
 
+        function normalizeAdb(cmd) {
+
+            // adb shell heredoc
+            cmd = cmd.replace(/adb\s+shell\s+<<'EOF'/g, "");
+
+            // adb shell command
+            cmd = cmd.replace(/adb\s+shell\s+/g, "");
+
+            // 혹시 남은 adb shell
+            cmd = cmd.replace(/^\s*adb\s+shell\s*$/gm, "");
+
+            return cmd;
+        }
+
         function buildHorizontalRuns(pixels) {
 
-            const rows = new Map();
+            const map = new Map();
 
             for (const p of pixels) {
-                if (!rows.has(p.y)) rows.set(p.y, []);
-                rows.get(p.y).push(p.x);
+                if (!map.has(p.y)) map.set(p.y, []);
+                map.get(p.y).push(p.x);
             }
 
             const runs = [];
 
-            for (const [y, xs] of rows) {
+            for (const [y, xs] of map) {
 
                 xs.sort((a, b) => a - b);
 
@@ -664,13 +669,11 @@ sleep 2
                         continue;
                     }
 
-                    runs.push({ y, x1: start, x2: prev });
-
-                    start = x;
-                    prev = x;
+                    runs.push({ x1: start, x2: prev, y });
+                    start = prev = x;
                 }
 
-                runs.push({ y, x1: start, x2: prev });
+                runs.push({ x1: start, x2: prev, y });
             }
 
             return runs;
@@ -755,73 +758,45 @@ TIMER_PID=$!\n`;
                 const pixels = buckets[color];
                 if (!pixels || !pixels.length) continue;
 
-                const paths = buildGreedyPaths(pixels);
-
                 let count = 0;
 
-                CMD += "adb shell <<'EOF'\n";
+                const runs = buildHorizontalRuns(pixels);
 
-                for (const path of paths) {
+                for (const r of runs) {
 
-                    if (path.length === 1) {
+                    const x1 = Math.round(baseX + r.x1 * scaleX + offsetX);
+                    const x2 = Math.round(baseX + r.x2 * scaleX + offsetX);
+                    const y = Math.round(baseY + r.y * scaleY + offsetY);
 
-                        const p = path[0];
+                    const dist = Math.abs(r.x2 - r.x1);
 
-                        const x = Math.round(baseX + p.x * scaleX + offsetX);
-                        const y = Math.round(baseY + p.y * scaleY + offsetY);
+                    if (dist === 0) {
 
-                        CMD += `input tap ${x} ${y}\n`;
-                        CMD += `input tap ${x} ${y}\n`;
-
-                        count++;
+                        CMD += `input tap ${x1} ${y}\n`;
 
                     } else {
 
-                        for (let i = 0; i < path.length - 1; i++) {
+                        const duration = computeSwipeDuration(dist);
 
-                            const a = path[i];
-                            const b = path[i + 1];
+                        CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
+                        CMD += `input swipe ${x2} ${y} ${x1} ${y} ${duration}\n`;
+                        CMD += `input tap ${x1} ${y}\n`;
+                        CMD += `input tap ${x2} ${y}\n`;
 
-                            const x1 = Math.round(baseX + a.x * scaleX + offsetX);
-                            const y1 = Math.round(baseY + a.y * scaleY + offsetY);
 
-                            const x2 = Math.round(baseX + b.x * scaleX + offsetX);
-                            const y2 = Math.round(baseY + b.y * scaleY + offsetY);
-
-                            const duration = computePathDuration(1);
-
-                            CMD += `input swipe ${x1} ${y1} ${x2} ${y2} ${duration}\n`;
-
-                            count++;
-
-                            if (count % 120 === 0) {
-
-                                CMD += "EOF\n";
-                                CMD += "sleep 0.4\n";
-                                CMD += "adb shell <<'EOF'\n";
-                            }
-                        }
                     }
+
+                    count++;
                 }
 
-                CMD += "EOF\n";
             }
 
             CMD += `kill $TIMER_PID 2>/dev/null
 wait $TIMER_PID 2>/dev/null
 echo
-printf "✔ Total: %02d:%02d\n" $((SECONDS/60)) $((SECONDS%60))
-echo -e "\a"
-sleep 0.1
-echo -e "\a"
-sleep 0.1
-echo -e "\a"
-sleep 0.1
-echo -e "\a"
-sleep 0.1
-echo -e "\a"
-`;
+printf "✔ Total: %02d:%02d\n" $((SECONDS/60)) $((SECONDS%60))`;
 
+            CMD = normalizeAdb(CMD);
             return CMD;
         }
 
