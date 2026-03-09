@@ -619,8 +619,8 @@ sleep 2
 
         function computeSwipeDuration(pxLength) {
 
-            const base = 20;      // 최소 duration
-            const factor = 12;     // 픽셀당 추가 ms
+            const base = 50;      // 최소 duration
+            const factor = 20;     // 픽셀당 추가 ms
             const max = 600;      // 너무 길어지는 것 방지
 
             const d = base + pxLength * factor;
