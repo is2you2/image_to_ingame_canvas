@@ -709,7 +709,7 @@ TIMER_PID=$!\n`;
 
                     const length = run.x2 - run.x1;
 
-                    if (length >= 12) {  // ← 최소 길이 기준 (조정 가능: 3~8 사이 추천)
+                    if (length >= 5) {  // ← 최소 길이 기준 (조정 가능: 3~8 사이 추천)
                         const duration = computeSwipeDuration(length);
 
                         CMD += `input swipe ${x1} ${y} ${x2} ${y} ${duration}\n`;
