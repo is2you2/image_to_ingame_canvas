@@ -10,8 +10,8 @@ from PIL import Image
 # 1. 하드코딩된 경로 설정
 # ==========================================
 
-PALETTE_JSON_PATH = "/home/liss22/두근두근타운_두타그녀_캔버스/00_palette.json"
-CONFIG_JSON_PATH = "/home/liss22/두근두근타운_두타그녀_캔버스/01_canvas_config.json"
+PALETTE_JSON_PATH = "/home/liss22/두근두근타운/00_palette.json"
+CONFIG_JSON_PATH = "/home/liss22/두근두근타운/01_canvas_config.json"
 SCREENSHOT_HOST_PATH = "/home/liss22/Downloads/mobile_capture.png"      # 호스트에 저장될 스크린샷 경로
 SCREENSHOT_MOBILE_PATH = "/sdcard/screen_temp.png"  # 모바일 내부 임시 경로
 
